@@ -3,21 +3,10 @@
 
 $ErrorActionPreference = "Stop"
 
+# Keep gcloud warnings/errors from becoming PowerShell-native exceptions.
+# We inspect $LASTEXITCODE manually.
 if ($PSVersionTable.PSVersion.Major -ge 7) {
     $PSNativeCommandUseErrorActionPreference = $false
-}
-
-function Invoke-Gcloud {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string[]]$Args
-    )
-
-    & gcloud @Args
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "gcloud command failed: gcloud $($Args -join ' ')"
-    }
 }
 
 if (-not $env:PROJECT_ID) { $env:PROJECT_ID = "seped-500410" }
@@ -34,29 +23,54 @@ Write-Host "Zone: $env:ZONE"
 Write-Host "Machine: $env:MACHINE_TYPE"
 Write-Host "GPU: $env:GPU_TYPE x $env:GPU_COUNT"
 
-Invoke-Gcloud @("config", "set", "project", $env:PROJECT_ID)
+& gcloud config set project $env:PROJECT_ID
+if ($LASTEXITCODE -ne 0) { throw "Failed to set gcloud project." }
 
 Write-Host ""
-Write-Host "Checking whether VM already exists..."
-$vmExists = (& gcloud compute instances describe $env:VM_NAME --zone $env:ZONE --project $env:PROJECT_ID 2>$null)
+Write-Host "Creating GPU VM..."
+Write-Host "If it already exists, the script will continue after checking it."
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "VM already exists: $env:VM_NAME"
-} else {
-    Write-Host "Creating GPU VM..."
-    Invoke-Gcloud @(
-        "compute", "instances", "create", $env:VM_NAME,
-        "--project", $env:PROJECT_ID,
-        "--zone", $env:ZONE,
-        "--machine-type", $env:MACHINE_TYPE,
-        "--accelerator", "type=$env:GPU_TYPE,count=$env:GPU_COUNT",
-        "--maintenance-policy", "TERMINATE",
-        "--boot-disk-size", $env:BOOT_DISK_SIZE,
-        "--boot-disk-type", "pd-balanced",
-        "--image-family", "ubuntu-2204-lts",
-        "--image-project", "ubuntu-os-cloud",
-        "--scopes", "https://www.googleapis.com/auth/cloud-platform"
-    )
+& gcloud compute instances create $env:VM_NAME `
+    --project $env:PROJECT_ID `
+    --zone $env:ZONE `
+    --machine-type $env:MACHINE_TYPE `
+    --accelerator "type=$env:GPU_TYPE,count=$env:GPU_COUNT" `
+    --maintenance-policy TERMINATE `
+    --boot-disk-size $env:BOOT_DISK_SIZE `
+    --boot-disk-type pd-balanced `
+    --image-family ubuntu-2204-lts `
+    --image-project ubuntu-os-cloud `
+    --scopes https://www.googleapis.com/auth/cloud-platform
+
+$createExit = $LASTEXITCODE
+
+if ($createExit -ne 0) {
+    Write-Host ""
+    Write-Host "VM create returned exit code $createExit. Checking whether VM already exists..." -ForegroundColor Yellow
+
+    & gcloud compute instances describe $env:VM_NAME --zone $env:ZONE --project $env:PROJECT_ID 1>$null 2>$null
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "VM already exists and is accessible: $env:VM_NAME"
+    } else {
+        Write-Host ""
+        Write-Host "VM was not created." -ForegroundColor Red
+        Write-Host "Most likely causes:"
+        Write-Host "  1. NVIDIA T4 GPU quota is 0 in this region."
+        Write-Host "  2. T4 capacity is unavailable in this zone."
+        Write-Host "  3. The selected machine/GPU combination is not available."
+        Write-Host ""
+        Write-Host "Try another zone:"
+        Write-Host '$env:ZONE="europe-west4-b"'
+        Write-Host ".\scripts\gcp_create_t4_vm.ps1"
+        Write-Host ""
+        Write-Host "or:"
+        Write-Host '$env:ZONE="europe-west4-c"'
+        Write-Host ".\scripts\gcp_create_t4_vm.ps1"
+        Write-Host ""
+        Write-Host "If all zones fail, request NVIDIA T4 GPU quota for europe-west4."
+        exit 1
+    }
 }
 
 Write-Host ""
@@ -67,4 +81,4 @@ Write-Host "Cost safety commands:"
 Write-Host "gcloud compute instances stop $env:VM_NAME --zone $env:ZONE --project $env:PROJECT_ID"
 Write-Host "gcloud compute instances delete $env:VM_NAME --zone $env:ZONE --project $env:PROJECT_ID"
 Write-Host ""
-Write-Host "If VM creation fails with quota or resource availability, try changing `$env:ZONE to europe-west4-b, europe-west4-c, or request NVIDIA T4 GPU quota."
+Write-Host "Next after SSH: install NVIDIA drivers, clone repo, copy dataset from Cloud Storage, run training pipeline."

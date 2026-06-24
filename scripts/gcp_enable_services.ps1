@@ -3,9 +3,10 @@
 
 $ErrorActionPreference = "Stop"
 
-# Make native command failures stop the script in PowerShell 7+
+# Keep gcloud warnings from being treated as fatal PowerShell exceptions.
+# We check $LASTEXITCODE manually after each gcloud command instead.
 if ($PSVersionTable.PSVersion.Major -ge 7) {
-    $PSNativeCommandUseErrorActionPreference = $true
+    $PSNativeCommandUseErrorActionPreference = $false
 }
 
 function Invoke-Gcloud {
@@ -30,12 +31,21 @@ Invoke-Gcloud @("config", "set", "project", $env:PROJECT_ID)
 
 Write-Host ""
 Write-Host "Checking billing status..."
-$billingStatus = (& gcloud beta billing projects describe $env:PROJECT_ID --format="value(billingEnabled)" 2>$null)
+$billingStatus = (& gcloud billing projects describe $env:PROJECT_ID --format="value(billingEnabled)" 2>$null)
 
-if ($LASTEXITCODE -ne 0 -or $billingStatus -ne "True") {
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "Could not read billing status with gcloud." -ForegroundColor Yellow
+    Write-Host "This is usually an auth/permission issue, not a Python issue."
+    Write-Host "Run: gcloud auth login"
+    Write-Host "Then rerun this script."
+    exit 1
+}
+
+if ($billingStatus -ne "True") {
     Write-Host ""
     Write-Host "STOP: Billing is not enabled for project $env:PROJECT_ID." -ForegroundColor Red
-    Write-Host "Open Google Cloud Console → Billing → My Projects → find sepedilearn / $env:PROJECT_ID → Link billing account."
+    Write-Host "Open Google Cloud Console -> Billing -> My Projects -> find sepedilearn / $env:PROJECT_ID -> Link billing account."
     Write-Host "Then rerun this script."
     exit 1
 }

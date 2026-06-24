@@ -30,36 +30,13 @@ Write-Host "Using project: $env:PROJECT_ID"
 Invoke-Gcloud @("config", "set", "project", $env:PROJECT_ID)
 
 Write-Host ""
-Write-Host "Checking billing status..."
-$billingStatus = (& gcloud billing projects describe $env:PROJECT_ID --format="value(billingEnabled)" 2>$null)
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host ""
-    Write-Host "Could not read billing status with gcloud." -ForegroundColor Yellow
-    Write-Host "This is usually an auth/permission issue, not a Python issue."
-    Write-Host "Run: gcloud auth login"
-    Write-Host "Then rerun this script."
-    exit 1
-}
-
-if ($billingStatus -ne "True") {
-    Write-Host ""
-    Write-Host "STOP: Billing is not enabled for project $env:PROJECT_ID." -ForegroundColor Red
-    Write-Host "Open Google Cloud Console -> Billing -> My Projects -> find sepedilearn / $env:PROJECT_ID -> Link billing account."
-    Write-Host "Then rerun this script."
-    exit 1
-}
-
-Write-Host "Billing enabled: $billingStatus"
-
-Write-Host ""
-Write-Host "Refreshing Application Default Credentials..."
-Write-Host "A browser login may open. Use the same Google account that owns/bills the project."
-Invoke-Gcloud @("auth", "application-default", "login")
+Write-Host "Refreshing Application Default Credentials quota project..."
+Write-Host "If this asks for login, use the Google account that owns/bills the project."
 Invoke-Gcloud @("auth", "application-default", "set-quota-project", $env:PROJECT_ID)
 
 Write-Host ""
 Write-Host "Enabling core services..."
+Write-Host "If billing is not linked, compute.googleapis.com will fail here with a clear billing error."
 Invoke-Gcloud @(
     "services", "enable",
     "serviceusage.googleapis.com",
@@ -70,12 +47,22 @@ Invoke-Gcloud @(
     "cloudresourcemanager.googleapis.com",
     "billingbudgets.googleapis.com",
     "monitoring.googleapis.com",
-    "logging.googleapis.com"
+    "logging.googleapis.com",
+    "cloudbilling.googleapis.com"
+)
+
+Write-Host ""
+Write-Host "Enabled services check:"
+Invoke-Gcloud @(
+    "services", "list",
+    "--enabled",
+    "--filter=compute.googleapis.com OR storage.googleapis.com OR cloudbilling.googleapis.com",
+    "--format=table(config.name,state)"
 )
 
 Write-Host ""
 Write-Host "Optional managed ML services, enable later if needed:"
-Write-Host "gcloud services enable aiplatform.googleapis.com notebooks.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com"
+Write-Host "gcloud services enable aiplatform.googleapis.com notebooks.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com --project $env:PROJECT_ID"
 
 Write-Host ""
 Write-Host "Done. Core Google Cloud APIs are enabled for $env:PROJECT_ID."

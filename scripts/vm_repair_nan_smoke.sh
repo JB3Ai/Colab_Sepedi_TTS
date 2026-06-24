@@ -6,6 +6,7 @@ DATASET_DIR="/content/sepedi_tts_dataset"
 TRAINING_READY="/content/training_ready"
 OUTPUT_DIR="/content/drive/MyDrive/Sepedi_Voice_Output"
 SMOKE_LOG="/tmp/sepedi_nan_repair_smoke.log"
+SAFE_PYTHONPATH="$PY_ROOT:${PYTHONPATH:-}"
 
 log() {
   echo ""
@@ -69,7 +70,7 @@ python3.10 - <<'PY'
 from pathlib import Path
 p = Path('/content/piper/src/python/piper_train/vits/lightning.py')
 text = p.read_text()
-for old in ['lr=2e-4', 'lr=0.0002', 'lr=5e-5', 'lr=0.00005']:
+for old in ['lr=2e-4', 'lr=0.0002', 'lr=5e-5', 'lr=0.00005', 'lr=1e-5']:
     text = text.replace(old, 'lr=1e-5')
 p.write_text(text)
 print('Patched learning rate to 1e-5 where matched')
@@ -81,7 +82,7 @@ mkdir -p "$TRAINING_READY"
 mkdir -p "$OUTPUT_DIR"
 
 log "Re-run preprocess"
-PYTHONPATH="$PY_ROOT:$PYTHONPATH" python3.10 -m piper_train.preprocess \
+PYTHONPATH="$SAFE_PYTHONPATH" python3.10 -m piper_train.preprocess \
   --language tn \
   --dataset-format ljspeech \
   --input-dir "$DATASET_DIR" \
@@ -92,7 +93,7 @@ PYTHONPATH="$PY_ROOT:$PYTHONPATH" python3.10 -m piper_train.preprocess \
 
 log "Run NaN-aware 50-step smoke test"
 set +e
-PYTHONPATH="$PY_ROOT:$PYTHONPATH" python3.10 -m piper_train \
+PYTHONPATH="$SAFE_PYTHONPATH" python3.10 -m piper_train \
   --dataset-dir "$TRAINING_READY" \
   --accelerator gpu \
   --devices 1 \
@@ -120,4 +121,4 @@ fi
 
 log "Smoke test passed without detected NaN/Inf"
 echo "Long training command:"
-echo "PYTHONPATH=$PY_ROOT:\$PYTHONPATH python3.10 -m piper_train --dataset-dir $TRAINING_READY --accelerator gpu --devices 1 --batch-size 1 --validation-split 0.0 --num-test-examples 0 --num_sanity_val_steps 0 --gradient_clip_val 0.05 --gradient_clip_algorithm norm --max_epochs 2000 --default_root_dir $OUTPUT_DIR"
+echo "PYTHONPATH=$SAFE_PYTHONPATH python3.10 -m piper_train --dataset-dir $TRAINING_READY --accelerator gpu --devices 1 --batch-size 1 --validation-split 0.0 --num-test-examples 0 --num_sanity_val_steps 0 --gradient_clip_val 0.05 --gradient_clip_algorithm norm --max_epochs 2000 --default_root_dir $OUTPUT_DIR"

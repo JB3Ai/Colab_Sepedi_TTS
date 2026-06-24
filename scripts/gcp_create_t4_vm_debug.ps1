@@ -23,8 +23,9 @@ Write-Host ""
 gcloud config set project $env:PROJECT_ID
 
 Write-Host ""
-Write-Host "Available accelerator types in this zone:"
-gcloud compute accelerator-types list --zones $env:ZONE --project $env:PROJECT_ID
+Write-Host "Checking available accelerator types. Your gcloud SDK does not support --zones on this command, so filtering locally:"
+$accelerators = gcloud compute accelerator-types list --project $env:PROJECT_ID --format="table(name,zone)"
+$accelerators | Select-String $env:ZONE
 
 Write-Host ""
 Write-Host "Creating VM and showing raw error if it fails..."

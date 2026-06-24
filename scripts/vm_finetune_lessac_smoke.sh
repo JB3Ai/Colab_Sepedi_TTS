@@ -62,7 +62,7 @@ PYTHONPATH="$SAFE_PYTHONPATH" python3.10 -m piper_train \
   --gradient_clip_algorithm norm \
   --max-phoneme-ids 160 \
   --max_steps 50 \
-  --resume_from_checkpoint "$CKPT" \
+  --resume_from_single_speaker_checkpoint "$CKPT" \
   --default_root_dir "$OUTPUT_DIR" 2>&1 | tee "$SMOKE_LOG"
 train_exit=${PIPESTATUS[0]}
 set -e
@@ -73,12 +73,12 @@ if [ "$train_exit" -ne 0 ]; then
   exit "$train_exit"
 fi
 
-if grep -qiE 'loss=nan|\bnan\b|inf' "$SMOKE_LOG"; then
-  echo "Fine-tune smoke still shows NaN/Inf. Do not run long fine-tuning yet."
+if grep -qiE 'loss=nan|loss=[^ ,]*nan|loss=[^ ,]*inf|\bnan\b.*loss|\binf\b.*loss' "$SMOKE_LOG"; then
+  echo "Fine-tune smoke still shows NaN/Inf loss. Do not run long fine-tuning yet."
   echo "Log: $SMOKE_LOG"
   exit 2
 fi
 
-log "Fine-tune smoke test passed without detected NaN/Inf"
+log "Fine-tune smoke test passed without detected NaN/Inf loss"
 echo "Long fine-tune command:"
-echo "PYTHONPATH=$SAFE_PYTHONPATH python3.10 -m piper_train --dataset-dir $TRAINING_READY --accelerator gpu --devices 1 --batch-size 1 --validation-split 0.0 --num-test-examples 0 --num_sanity_val_steps 0 --gradient_clip_val 0.005 --gradient_clip_algorithm norm --max-phoneme-ids 160 --max_epochs 1000 --resume_from_checkpoint $CKPT --checkpoint-epochs 1 --default_root_dir $OUTPUT_DIR"
+echo "PYTHONPATH=$SAFE_PYTHONPATH python3.10 -m piper_train --dataset-dir $TRAINING_READY --accelerator gpu --devices 1 --batch-size 1 --validation-split 0.0 --num-test-examples 0 --num_sanity_val_steps 0 --gradient_clip_val 0.005 --gradient_clip_algorithm norm --max-phoneme-ids 160 --max_epochs 1000 --resume_from_single_speaker_checkpoint $CKPT --checkpoint-epochs 1 --default_root_dir $OUTPUT_DIR"

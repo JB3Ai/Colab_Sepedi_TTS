@@ -7,6 +7,9 @@ OUTPUT_DIR="/content/drive/MyDrive/Sepedi_Voice_Output_FINETUNE"
 CKPT_DIR="/content/pretrained_piper_checkpoints"
 CKPT="$CKPT_DIR/lessac_medium.ckpt"
 CKPT_URL="https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/en/en_US/lessac/medium/epoch%3D2164-step%3D1355540.ckpt"
+CKPT_BASE_STEP=1355540
+SMOKE_STEPS=50
+SMOKE_MAX_STEPS=$((CKPT_BASE_STEP + SMOKE_STEPS))
 SAFE_PYTHONPATH="$PY_ROOT:${PYTHONPATH:-}"
 SMOKE_LOG="/tmp/sepedi_finetune_lessac_smoke.log"
 
@@ -46,7 +49,7 @@ for line in text.splitlines():
         print(line)
 PY
 
-log "Run 50-step fine-tune smoke test"
+log "Run 50-step fine-tune smoke test from checkpoint step $CKPT_BASE_STEP to $SMOKE_MAX_STEPS"
 rm -rf "$OUTPUT_DIR/lightning_logs"
 mkdir -p "$OUTPUT_DIR"
 set +e
@@ -61,8 +64,8 @@ PYTHONPATH="$SAFE_PYTHONPATH" python3.10 -m piper_train \
   --gradient_clip_val 0.005 \
   --gradient_clip_algorithm norm \
   --max-phoneme-ids 160 \
-  --max_steps 50 \
-  --resume_from_single_speaker_checkpoint "$CKPT" \
+  --max_steps "$SMOKE_MAX_STEPS" \
+  --resume_from_checkpoint "$CKPT" \
   --default_root_dir "$OUTPUT_DIR" 2>&1 | tee "$SMOKE_LOG"
 train_exit=${PIPESTATUS[0]}
 set -e
@@ -81,4 +84,4 @@ fi
 
 log "Fine-tune smoke test passed without detected NaN/Inf loss"
 echo "Long fine-tune command:"
-echo "PYTHONPATH=$SAFE_PYTHONPATH python3.10 -m piper_train --dataset-dir $TRAINING_READY --accelerator gpu --devices 1 --batch-size 1 --validation-split 0.0 --num-test-examples 0 --num_sanity_val_steps 0 --gradient_clip_val 0.005 --gradient_clip_algorithm norm --max-phoneme-ids 160 --max_epochs 1000 --resume_from_single_speaker_checkpoint $CKPT --checkpoint-epochs 1 --default_root_dir $OUTPUT_DIR"
+echo "PYTHONPATH=$SAFE_PYTHONPATH python3.10 -m piper_train --dataset-dir $TRAINING_READY --accelerator gpu --devices 1 --batch-size 1 --validation-split 0.0 --num-test-examples 0 --num_sanity_val_steps 0 --gradient_clip_val 0.005 --gradient_clip_algorithm norm --max-phoneme-ids 160 --max_steps 1356540 --resume_from_checkpoint $CKPT --checkpoint-epochs 1 --default_root_dir $OUTPUT_DIR"
